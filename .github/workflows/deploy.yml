@@ -1,0 +1,54 @@
+name: Keyless Deploy to App Engine
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  id-token: write # Required for requesting the OIDC JWT token
+  contents: read  # Required for checking out code
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Generate App Files On-The-Fly
+      run: |
+        # Create a custom service named 'portal'
+        cat << 'EOF' > main.py
+        from flask import Flask
+        app = Flask(__name__)
+
+        @app.route('/')
+        def portal_home():
+            return "Hello from WIF Keyless Deployment on App Engine!"
+
+        if __name__ == '__main__':
+            app.run(host='0.0.0.0', port=8080)
+        EOF
+
+        echo "Flask==3.0.2" > requirements.txt
+
+        cat << 'EOF' > app.yaml
+        runtime: python311
+        service: portal
+        EOF
+
+    - name: Authenticate to Google Cloud (WIF)
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+    - name: Deploy to App Engine
+      uses: google-github-actions/deploy-appengine@v2
+      with:
+        deliverables: 'app.yaml'
